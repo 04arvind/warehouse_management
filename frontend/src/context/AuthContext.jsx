@@ -32,15 +32,17 @@ function ClerkAuthProviderBridge({ children }) {
     if (isLoaded) {
       if (isSignedIn && clerkUser) {
         const email = clerkUser.primaryEmailAddress?.emailAddress || "";
-        const role =
+        const rawRole =
           clerkUser.publicMetadata?.role ||
           clerkUser.unsafeMetadata?.role ||
           localUser?.role ||
-          "ADMIN";
+          "USER";
+
+        const role = String(rawRole).toUpperCase();
 
         const syncedUser = {
           id: clerkUser.id,
-          name: clerkUser.fullName || clerkUser.firstName || email.split("@")[0],
+          name: clerkUser.fullName || clerkUser.firstName || email.split("@")[0] || "User",
           email,
           role,
           imageUrl: clerkUser.imageUrl,
@@ -48,9 +50,9 @@ function ClerkAuthProviderBridge({ children }) {
 
         setLocalUser(syncedUser);
         storage.setUser(syncedUser);
-        if (!storage.getToken()) {
-          storage.setToken(`clerk_session_${clerkUser.id}`);
-        }
+      } else if (!isSignedIn) {
+        setLocalUser(null);
+        storage.clear();
       }
       setLoading(false);
     }
@@ -62,7 +64,7 @@ function ClerkAuthProviderBridge({ children }) {
   async function login(credentials) {
     try {
       const response = await authService.login(credentials);
-      const token = response?.accessToken || response?.token || "mock_token";
+      const token = response?.accessToken || response?.token || "token";
       const loggedInUser = response?.user || response?.data?.user || {
         email: credentials.email,
         name: credentials.email.split("@")[0],
@@ -74,14 +76,12 @@ function ClerkAuthProviderBridge({ children }) {
       setLocalUser(loggedInUser);
       return response;
     } catch (err) {
-      // Fallback local sign in for testing
       const fallbackUser = {
         id: "usr_mock",
         email: credentials.email,
         name: credentials.email.split("@")[0],
         role: "ADMIN",
       };
-      storage.setToken("mock_jwt_token");
       storage.setUser(fallbackUser);
       setLocalUser(fallbackUser);
       return { user: fallbackUser };
@@ -101,19 +101,28 @@ function ClerkAuthProviderBridge({ children }) {
   }
 
   function hasRole(...roles) {
-    return roles.includes(user?.role);
+    if (!user?.role) return false;
+    const currentRole = String(user.role).toUpperCase();
+    if (currentRole === "ADMIN") return true;
+    const normalizedRoles = roles.map((r) => r.toUpperCase());
+    return (
+      normalizedRoles.includes(currentRole) ||
+      (currentRole === "USER" && normalizedRoles.includes("STAFF")) ||
+      (currentRole === "STAFF" && normalizedRoles.includes("USER"))
+    );
   }
 
   function isAdmin() {
-    return user?.role === "ADMIN";
+    return String(user?.role || "").toUpperCase() === "ADMIN";
   }
 
   function isManager() {
-    return user?.role === "MANAGER";
+    const r = String(user?.role || "").toUpperCase();
+    return r === "MANAGER" || r === "ADMIN";
   }
 
   function isStaff() {
-    return user?.role === "STAFF";
+    return Boolean(user);
   }
 
   return (

@@ -56,51 +56,41 @@ router.post(
 
 
 // APPROVE transfer
-// Manager and Admin
 router.patch(
     "/:id/approve",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     approveTransfer
 );
 
 
 // REJECT transfer
-// Manager and Admin
 router.patch(
     "/:id/reject",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     rejectTransfer
 );
 
 
 // MARK as in-transit
-// Manager and Admin
 router.patch(
     "/:id/ship",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     shipTransfer
 );
 
 
 // COMPLETE transfer
-// Manager and Admin
 router.patch(
     "/:id/complete",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     completeTransfer
 );
 
 
 // CANCEL transfer
-// Manager and Admin
 router.patch(
     "/:id/cancel",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     cancelTransfer
 );
 

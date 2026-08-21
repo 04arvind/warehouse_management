@@ -16,6 +16,7 @@ export default function useInventory({
     error,
     fetchInventory,
     getWarehouseInventory,
+    createInventory,
     updateStock,
     getLowStock,
   } = useInventoryContext();
@@ -91,7 +92,7 @@ export default function useInventory({
     refresh,
 
     getWarehouseInventory,
-
+    create: createInventory,
     updateStock,
 
     search,

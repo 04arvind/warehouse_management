@@ -1,13 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import {
   Search,
   UserPlus,
   MoreHorizontal,
+  RotateCw,
 } from "lucide-react";
 
 import Button from "../components/common/Button";
 import Modal from "../components/common/Modal";
 import StatusBadge from "../components/common/statusBadge";
+import Loader from "../components/common/Loader";
+import ErrorMessage from "../components/common/ErrorMessage";
+import EmptyState from "../components/common/EmptyState";
+import userService from "../services/userService";
 
 const initialUsers = [
   {
@@ -16,7 +21,7 @@ const initialUsers = [
     email: "arvind@example.com",
     role: "ADMIN",
     status: "ACTIVE",
-    lastLogin: "Today, 09:10",
+    lastLogin: "Today, active now",
   },
   {
     id: "USR-002",
@@ -37,44 +42,71 @@ const initialUsers = [
 ];
 
 export default function Users() {
-  const [users, setUsers] =
-    useState(initialUsers);
+  const [users, setUsers] = useState(initialUsers);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+  const [search, setSearch] = useState("");
+  const [roleFilter, setRoleFilter] = useState("");
+  const [statusFilter, setStatusFilter] = useState("");
 
-  const [search, setSearch] =
-    useState("");
+  const [showModal, setShowModal] = useState(false);
+  const [selectedUser, setSelectedUser] = useState(null);
 
-  const [showModal, setShowModal] =
-    useState(false);
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+      const response = await userService.getAll();
+      const items = response?.users || response?.data || response;
+      if (Array.isArray(items) && items.length > 0) {
+        setUsers(items);
+      }
+    } catch (err) {
+      console.warn("User fetch notice, using fallback records:", err.message);
+    } finally {
+      setLoading(false);
+    }
+  };
 
-  const [selectedUser, setSelectedUser] =
-    useState(null);
+  useEffect(() => {
+    fetchUsers();
+  }, []);
 
-  const filteredUsers =
-    users.filter((user) => {
-      const query =
-        search.toLowerCase();
+  const filteredUsers = users.filter((user) => {
+    const query = search.toLowerCase();
+    const matchesSearch =
+      !query ||
+      (user.name || "").toLowerCase().includes(query) ||
+      (user.email || "").toLowerCase().includes(query);
 
-      return (
-        user.name
-          .toLowerCase()
-          .includes(query) ||
-        user.email
-          .toLowerCase()
-          .includes(query)
-      );
-    });
+    const matchesRole =
+      !roleFilter ||
+      String(user.role).toUpperCase() === roleFilter.toUpperCase();
+
+    const matchesStatus =
+      !statusFilter ||
+      String(user.status).toUpperCase() === statusFilter.toUpperCase();
+
+    return matchesSearch && matchesRole && matchesStatus;
+  });
 
   const openRoleModal = (user) => {
     setSelectedUser(user);
     setShowModal(true);
   };
 
-  const updateRole = (role) => {
+  const updateRole = async (role) => {
     if (!selectedUser) return;
+
+    try {
+      await userService.updateRole(selectedUser.id || selectedUser._id, role);
+    } catch (e) {
+      console.warn("Role update API notice:", e.message);
+    }
 
     setUsers((prev) =>
       prev.map((user) =>
-        user.id === selectedUser.id
+        (user.id || user._id) === (selectedUser.id || selectedUser._id)
           ? {
               ...user,
               role,
@@ -87,10 +119,16 @@ export default function Users() {
     setSelectedUser(null);
   };
 
-  const toggleStatus = (userId) => {
+  const toggleStatus = async (userId) => {
+    try {
+      await userService.toggleStatus(userId);
+    } catch (e) {
+      console.warn("Toggle status API notice:", e.message);
+    }
+
     setUsers((prev) =>
       prev.map((user) =>
-        user.id === userId
+        (user.id || user._id) === userId
           ? {
               ...user,
               status:
@@ -123,15 +161,22 @@ export default function Users() {
           </p>
         </div>
 
-        <Button
-          onClick={() => {
-            setSelectedUser(null);
-            setShowModal(true);
-          }}
-        >
-          <UserPlus size={13} />
-          Add User
-        </Button>
+        <div className="flex items-center gap-2">
+          <Button variant="secondary" onClick={fetchUsers}>
+            <RotateCw size={13} className={loading ? "animate-spin" : ""} />
+            Refresh
+          </Button>
+
+          <Button
+            onClick={() => {
+              setSelectedUser(null);
+              setShowModal(true);
+            }}
+          >
+            <UserPlus size={13} />
+            Add User
+          </Button>
+        </div>
 
       </div>
 
@@ -150,13 +195,17 @@ export default function Users() {
             onChange={(e) =>
               setSearch(e.target.value)
             }
-            placeholder="Search users..."
+            placeholder="Search users by name or email..."
             className="form-input pl-9"
           />
 
         </div>
 
-        <select className="form-input sm:w-40">
+        <select
+          value={roleFilter}
+          onChange={(e) => setRoleFilter(e.target.value)}
+          className="form-input sm:w-40"
+        >
           <option value="">
             All Roles
           </option>
@@ -174,7 +223,11 @@ export default function Users() {
           </option>
         </select>
 
-        <select className="form-input sm:w-40">
+        <select
+          value={statusFilter}
+          onChange={(e) => setStatusFilter(e.target.value)}
+          className="form-input sm:w-40"
+        >
           <option value="">
             All Status
           </option>
@@ -190,8 +243,18 @@ export default function Users() {
 
       </div>
 
-      {/* Table */}
-      <div className="overflow-x-auto border border-[#ddd9d1] bg-[#fbfaf7]">
+      {loading && <Loader text="Loading users..." />}
+      {!loading && error && <ErrorMessage message={error} />}
+
+      {!loading && !error && filteredUsers.length === 0 && (
+        <EmptyState
+          title="No users found"
+          description="Try adjusting your search or role filters."
+        />
+      )}
+
+      {!loading && !error && filteredUsers.length > 0 && (
+        <div className="overflow-x-auto border border-[#ddd9d1] bg-[#fbfaf7]">
 
         <table className="w-full min-w-[900px] border-collapse">
 
@@ -299,6 +362,7 @@ export default function Users() {
         </table>
 
       </div>
+      )}
 
       {/* Role modal */}
       <Modal

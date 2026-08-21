@@ -1,6 +1,7 @@
 import {
   useState,
 } from "react";
+import { useNavigate } from "react-router-dom";
 
 import {
   Plus,
@@ -21,6 +22,7 @@ import useWarehouses from "../hooks/useWarehouses";
 import useAuth from "../hooks/useAuth";
 
 export default function Warehouses() {
+  const navigate = useNavigate();
   const {
     warehouses,
     loading,
@@ -103,12 +105,10 @@ export default function Warehouses() {
           </p>
         </div>
 
-        {canManageWarehouses && (
-          <Button onClick={openCreate}>
-            <Plus size={13} />
-            Create Warehouse
-          </Button>
-        )}
+        <Button onClick={openCreate}>
+          <Plus size={13} />
+          Create Warehouse
+        </Button>
 
       </div>
 
@@ -125,12 +125,10 @@ export default function Warehouses() {
           title="No warehouses found"
           description="Create your first warehouse to start managing inventory and transfers."
           action={
-            canManageWarehouses ? (
-              <Button onClick={openCreate}>
-                <Plus size={13} />
-                Create Warehouse
-              </Button>
-            ) : null
+            <Button onClick={openCreate}>
+              <Plus size={13} />
+              Create Warehouse
+            </Button>
           }
         />
       )}
@@ -139,15 +137,15 @@ export default function Warehouses() {
         <>
           {/* Cards */}
           <div className="grid gap-4 md:grid-cols-2 xl:grid-cols-3">
-
             {warehouses.map((warehouse) => (
               <WarehouseCard
                 key={warehouse._id || warehouse.id}
                 warehouse={warehouse}
-                onViewInventory={() => {}}
+                onViewInventory={(wh) =>
+                  navigate(`/inventory?warehouse=${wh._id || wh.id}`)
+                }
               />
             ))}
-
           </div>
 
           {/* Table */}
@@ -165,16 +163,8 @@ export default function Warehouses() {
 
             <WarehouseTable
               warehouses={warehouses}
-              onEdit={
-                canManageWarehouses
-                  ? openEdit
-                  : undefined
-              }
-              onDelete={
-                isAdmin
-                  ? setDeleteWarehouse
-                  : undefined
-              }
+              onEdit={openEdit}
+              onDelete={setDeleteWarehouse}
             />
 
           </div>

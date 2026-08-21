@@ -3,6 +3,7 @@ const mongoose = require("mongoose");
 const Transfer = require("../models/Transfer");
 const Inventory = require("../models/Inventory");
 const Warehouse = require("../models/Warehouse");
+const { createAuditLog } = require("../utils/audit");
 
 
 // Generate transfer number
@@ -50,11 +51,11 @@ const getTransfers = async (
             await Transfer.find(filter)
                 .populate(
                     "sourceWarehouse",
-                    "name code"
+                    "name code location"
                 )
                 .populate(
                     "destinationWarehouse",
-                    "name code"
+                    "name code location"
                 )
                 .sort({
                     createdAt: -1,
@@ -180,9 +181,22 @@ const createTransfer = async (
         const transferItems = [];
 
         for (const item of items) {
+            const inventoryId =
+                item.inventory ||
+                item.productId ||
+                item._id ||
+                item.id;
+
+            if (!inventoryId) {
+                return res.status(400).json({
+                    success: false,
+                    message: "Valid inventory item ID is required",
+                });
+            }
+
             const inventory =
                 await Inventory.findOne({
-                    _id: item.inventory,
+                    _id: inventoryId,
                     warehouse:
                         sourceWarehouse,
                 });
@@ -191,13 +205,15 @@ const createTransfer = async (
                 return res.status(404).json({
                     success: false,
                     message:
-                        `Inventory item ${item.inventory} not found in source warehouse`,
+                        `Inventory item not found in source warehouse`,
                 });
             }
 
+            const quantity = Number(item.quantity);
+
             if (
-                !item.quantity ||
-                item.quantity <= 0
+                !quantity ||
+                quantity <= 0
             ) {
                 return res.status(400).json({
                     success: false,
@@ -207,13 +223,13 @@ const createTransfer = async (
             }
 
             if (
-                item.quantity >
+                quantity >
                 inventory.quantity
             ) {
                 return res.status(400).json({
                     success: false,
                     message:
-                        `Insufficient stock for ${inventory.name}`,
+                        `Insufficient stock for ${inventory.name}. Available: ${inventory.quantity}`,
                 });
             }
 
@@ -222,7 +238,7 @@ const createTransfer = async (
                     inventory._id,
                 sku: inventory.sku,
                 name: inventory.name,
-                quantity: item.quantity,
+                quantity,
             });
         }
 
@@ -240,10 +256,18 @@ const createTransfer = async (
                 status: "PENDING",
 
                 requestedBy:
-                    req.auth.userId,
+                    req.auth?.userId || "anonymous",
 
-                notes,
+                notes: notes || "",
             });
+
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "TRANSFER_CREATED",
+            resource: "Transfer",
+            resourceId: transfer._id.toString(),
+            details: `Created transfer ${transfer.transferNumber} from ${source.name} to ${destination.name}`,
+        });
 
         res.status(201).json({
             success: true,
@@ -292,9 +316,17 @@ const approveTransfer = async (
             "APPROVED";
 
         transfer.approvedBy =
-            req.auth.userId;
+            req.auth?.userId || "anonymous";
 
         await transfer.save();
+
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "TRANSFER_APPROVED",
+            resource: "Transfer",
+            resourceId: transfer._id.toString(),
+            details: `Approved transfer ${transfer.transferNumber}`,
+        });
 
         res.status(200).json({
             success: true,
@@ -351,6 +383,14 @@ const rejectTransfer = async (
 
         await transfer.save();
 
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "TRANSFER_REJECTED",
+            resource: "Transfer",
+            resourceId: transfer._id.toString(),
+            details: `Rejected transfer ${transfer.transferNumber}. Reason: ${transfer.rejectionReason}`,
+        });
+
         res.status(200).json({
             success: true,
             message:
@@ -399,6 +439,14 @@ const shipTransfer = async (
 
         await transfer.save();
 
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "TRANSFER_SHIPPED",
+            resource: "Transfer",
+            resourceId: transfer._id.toString(),
+            details: `Marked transfer ${transfer.transferNumber} as in transit`,
+        });
+
         res.status(200).json({
             success: true,
             message:
@@ -417,133 +465,139 @@ const completeTransfer = async (
     res,
     next
 ) => {
-    const session =
-        await mongoose.startSession();
+    let session = null;
+    let useTransaction = true;
 
     try {
+        session = await mongoose.startSession();
         session.startTransaction();
+    } catch (sessionErr) {
+        // Standalone MongoDB without replica set doesn't support transactions
+        useTransaction = false;
+        if (session) {
+            try {
+                session.endSession();
+            } catch (e) {}
+            session = null;
+        }
+    }
 
-        const transfer =
-            await Transfer.findById(
-                req.params.id
-            ).session(session);
+    try {
+        const transferQuery = Transfer.findById(req.params.id);
+        if (useTransaction && session) {
+            transferQuery.session(session);
+        }
+
+        const transfer = await transferQuery;
 
         if (!transfer) {
-            await session.abortTransaction();
-
+            if (useTransaction && session) await session.abortTransaction();
             return res.status(404).json({
                 success: false,
-                message:
-                    "Transfer not found",
+                message: "Transfer not found",
             });
         }
 
-        if (
-            transfer.status !==
-            "IN_TRANSIT"
-        ) {
-            await session.abortTransaction();
-
+        if (transfer.status !== "IN_TRANSIT") {
+            if (useTransaction && session) await session.abortTransaction();
             return res.status(400).json({
                 success: false,
-                message:
-                    "Only in-transit transfers can be completed",
+                message: "Only in-transit transfers can be completed",
             });
         }
 
-        // Update source inventory
-        for (
-            const item of transfer.items
-        ) {
-            const sourceInventory =
-                await Inventory.findOne({
-                    _id: item.inventory,
-                    warehouse:
-                        transfer.sourceWarehouse,
-                }).session(session);
+        // Update source and destination inventory
+        for (const item of transfer.items) {
+            const srcQuery = Inventory.findOne({
+                _id: item.inventory,
+                warehouse: transfer.sourceWarehouse,
+            });
+            if (useTransaction && session) srcQuery.session(session);
+            const sourceInventory = await srcQuery;
 
             if (!sourceInventory) {
                 throw new Error(
-                    `Source inventory not found for ${item.sku}`
+                    `Source inventory not found for SKU ${item.sku}`
                 );
             }
 
-            if (
-                sourceInventory.quantity <
-                item.quantity
-            ) {
+            if (sourceInventory.quantity < item.quantity) {
                 throw new Error(
-                    `Insufficient stock for ${item.sku}`
+                    `Insufficient stock for SKU ${item.sku}. Available: ${sourceInventory.quantity}`
                 );
             }
 
-            sourceInventory.quantity -=
-                item.quantity;
-
-            await sourceInventory.save({
-                session,
-            });
+            sourceInventory.quantity -= item.quantity;
+            if (useTransaction && session) {
+                await sourceInventory.save({ session });
+            } else {
+                await sourceInventory.save();
+            }
 
             // Find destination inventory
-            let destinationInventory =
-                await Inventory.findOne({
-                    warehouse:
-                        transfer.destinationWarehouse,
-                    sku: item.sku,
-                }).session(session);
+            const destQuery = Inventory.findOne({
+                warehouse: transfer.destinationWarehouse,
+                sku: item.sku,
+            });
+            if (useTransaction && session) destQuery.session(session);
+            let destinationInventory = await destQuery;
 
             // Create destination item if it doesn't exist
             if (!destinationInventory) {
-                destinationInventory =
-                    new Inventory({
-                        warehouse:
-                            transfer.destinationWarehouse,
-
-                        sku: item.sku,
-
-                        name: item.name,
-
-                        quantity: 0,
-
-                        minimumStock: 10,
-                    });
+                destinationInventory = new Inventory({
+                    warehouse: transfer.destinationWarehouse,
+                    sku: item.sku,
+                    name: item.name,
+                    quantity: 0,
+                    minimumStock: 10,
+                });
             }
 
-            destinationInventory.quantity +=
-                item.quantity;
-
-            await destinationInventory.save({
-                session,
-            });
+            destinationInventory.quantity += item.quantity;
+            if (useTransaction && session) {
+                await destinationInventory.save({ session });
+            } else {
+                await destinationInventory.save();
+            }
         }
 
-        transfer.status =
-            "COMPLETED";
+        transfer.status = "COMPLETED";
+        transfer.completedBy = req.auth?.userId || "anonymous";
+        transfer.completedAt = new Date();
 
-        transfer.completedBy =
-            req.auth.userId;
+        if (useTransaction && session) {
+            await transfer.save({ session });
+            await session.commitTransaction();
+        } else {
+            await transfer.save();
+        }
 
-        transfer.completedAt =
-            new Date();
-
-        await transfer.save({
-            session,
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "TRANSFER_COMPLETED",
+            resource: "Transfer",
+            resourceId: transfer._id.toString(),
+            details: `Completed transfer ${transfer.transferNumber} and updated stock`,
         });
-
-        await session.commitTransaction();
 
         res.status(200).json({
             success: true,
-            message:
-                "Transfer completed and stock updated",
+            message: "Transfer completed and stock updated",
             transfer,
         });
     } catch (error) {
-        await session.abortTransaction();
-
+        if (useTransaction && session) {
+            try {
+                await session.abortTransaction();
+            } catch (abortErr) {}
+        }
         next(error);
     } finally {
-        session.endSession();
+        if (useTransaction && session) {
+            try {
+                session.endSession();
+            } catch (e) {}
+        }
     }
 };
 
@@ -590,6 +644,14 @@ const cancelTransfer = async (
             "CANCELLED";
 
         await transfer.save();
+
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "TRANSFER_CANCELLED",
+            resource: "Transfer",
+            resourceId: transfer._id.toString(),
+            details: `Cancelled transfer ${transfer.transferNumber}`,
+        });
 
         res.status(200).json({
             success: true,

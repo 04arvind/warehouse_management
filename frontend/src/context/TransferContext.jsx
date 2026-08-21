@@ -83,7 +83,7 @@ export function TransferProvider({ children }) {
   /*
    * GET /api/transfers
    */
-  const fetchTransfers = async (filters = {}) => {
+  const fetchTransfers = useCallback(async (filters = {}) => {
     try {
       setLoading(true);
       setError(null);
@@ -99,25 +99,25 @@ export function TransferProvider({ children }) {
       return data;
     } catch (err) {
       // Keep local transfers fallback
-      return transfers;
+      return defaultTransfers;
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   /*
    * GET /api/transfers/:id
    */
-  const getTransferById = (id) => {
+  const getTransferById = useCallback((id) => {
     return transfers.find(
       (transfer) => transfer.id === id || transfer._id === id
     );
-  };
+  }, [transfers]);
 
   /*
    * POST /api/transfers
    */
-  const createTransfer = async (transferData) => {
+  const createTransfer = useCallback(async (transferData) => {
     try {
       setLoading(true);
       setError(null);
@@ -128,7 +128,7 @@ export function TransferProvider({ children }) {
         newTransfer = response?.data || response;
       } catch (e) {
         // Fallback local transfer creation
-        const num = 1025 + transfers.length;
+        const num = Date.now().toString().slice(-4);
         newTransfer = {
           _id: `TR-${num}`,
           id: `TR-${num}`,
@@ -154,12 +154,12 @@ export function TransferProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, []);
 
   /*
    * PATCH /api/transfers/:id/status
    */
-  const updateTransferStatus = async (id, updater, fallbackStatus) => {
+  const updateTransferStatus = useCallback(async (id, updater, fallbackStatus) => {
     try {
       setLoading(true);
       setError(null);
@@ -169,11 +169,9 @@ export function TransferProvider({ children }) {
         const response = await updater(id);
         updatedTransfer = response?.data || response;
       } catch (e) {
-        const existing = transfers.find(
-          (t) => t._id === id || t.id === id
-        );
         updatedTransfer = {
-          ...existing,
+          _id: id,
+          id: id,
           status: fallbackStatus,
           updatedAt: new Date().toISOString(),
         };
@@ -187,11 +185,10 @@ export function TransferProvider({ children }) {
         )
       );
 
-      // Feature #4: If status changed to COMPLETED, adjust inventory stock levels
+      // If status changed to COMPLETED, adjust inventory stock levels
       if (fallbackStatus === "COMPLETED") {
-        const targetTransfer = updatedTransfer || getTransferById(id);
-        if (targetTransfer) {
-          adjustStockForCompletedTransfer(targetTransfer);
+        if (updatedTransfer) {
+          adjustStockForCompletedTransfer(updatedTransfer);
         }
       }
 
@@ -202,25 +199,25 @@ export function TransferProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [adjustStockForCompletedTransfer]);
 
-  const approveTransfer = async (id) => {
+  const approveTransfer = useCallback(async (id) => {
     return updateTransferStatus(id, transferService.approve, "APPROVED");
-  };
+  }, [updateTransferStatus]);
 
-  const rejectTransfer = async (id, reason = "") => {
+  const rejectTransfer = useCallback(async (id, reason = "") => {
     return updateTransferStatus(id, (tid) => transferService.reject(tid, reason), "REJECTED");
-  };
+  }, [updateTransferStatus]);
 
-  const shipTransfer = async (id) => {
+  const shipTransfer = useCallback(async (id) => {
     return updateTransferStatus(id, transferService.ship, "IN_TRANSIT");
-  };
+  }, [updateTransferStatus]);
 
-  const completeTransfer = async (id) => {
+  const completeTransfer = useCallback(async (id) => {
     return updateTransferStatus(id, transferService.complete, "COMPLETED");
-  };
+  }, [updateTransferStatus]);
 
-  const getTransferStats = () => {
+  const getTransferStats = useCallback(() => {
     const total = transfers.length;
     const pending = transfers.filter((t) => t.status === "PENDING").length;
     const approved = transfers.filter((t) => t.status === "APPROVED").length;
@@ -236,7 +233,7 @@ export function TransferProvider({ children }) {
       completed,
       rejected,
     };
-  };
+  }, [transfers]);
 
   const value = {
     transfers,

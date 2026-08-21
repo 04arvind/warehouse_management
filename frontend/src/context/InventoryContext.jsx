@@ -91,11 +91,11 @@ export function InventoryProvider({ children }) {
       return data;
     } catch (err) {
       // Keep local state fallback
-      return inventory;
+      return defaultInventory;
     } finally {
       setLoading(false);
     }
-  }, [inventory]);
+  }, []);
 
   const getWarehouseInventory = useCallback(
     async (warehouseId, params = {}) => {
@@ -114,16 +114,12 @@ export function InventoryProvider({ children }) {
         }
         return data;
       } catch (err) {
-        return inventory.filter(
-          (item) =>
-            String(item.warehouseId) === String(warehouseId) ||
-            String(item.warehouse?._id || item.warehouse?.id) === String(warehouseId)
-        );
+        return [];
       } finally {
         setLoading(false);
       }
     },
-    [inventory]
+    []
   );
 
   const updateStock = useCallback(async (id, quantity) => {
@@ -136,16 +132,12 @@ export function InventoryProvider({ children }) {
         const response = await inventoryService.updateStock(id, quantity);
         updated = response?.data || response;
       } catch (e) {
-        // Fallback local stock update
-        const existing = inventory.find(
-          (item) => item._id === id || item.id === id
-        );
-        updated = { ...existing, quantity: Number(quantity) };
+        updated = { _id: id, id, quantity: Number(quantity) };
       }
 
       setInventory((prev) =>
         prev.map((item) =>
-          item._id === id || item.id === id ? updated : item
+          item._id === id || item.id === id ? { ...item, ...updated, quantity: Number(quantity) } : item
         )
       );
 
@@ -156,7 +148,7 @@ export function InventoryProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [inventory]);
+  }, []);
 
   const adjustStockForCompletedTransfer = useCallback((transfer) => {
     if (!transfer || !Array.isArray(transfer.items)) return;
@@ -293,6 +285,41 @@ export function InventoryProvider({ children }) {
     });
   }, [inventory]);
 
+  const createInventory = useCallback(async (data) => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      let created;
+      try {
+        const response = await inventoryService.create(data);
+        created = response?.data || response?.inventory || response;
+      } catch (e) {
+        created = {
+          _id: `inv_${Date.now()}`,
+          id: `inv_${Date.now()}`,
+          sku: data.sku || `SKU-${Math.floor(Math.random() * 9000 + 1000)}`,
+          product: data.name || data.product || data.productName,
+          productName: data.name || data.product || data.productName,
+          category: data.category || "General",
+          quantity: Number(data.quantity || 0),
+          minimumStock: Number(data.minimumStock || 10),
+          warehouse: data.warehouseName || "Main Warehouse",
+          warehouseId: data.warehouse,
+          status: Number(data.quantity) > 0 ? "IN_STOCK" : "OUT_OF_STOCK",
+        };
+      }
+
+      setInventory((prev) => [created, ...prev]);
+      return created;
+    } catch (err) {
+      setError(err?.response?.data?.message || "Failed to add inventory.");
+      throw err;
+    } finally {
+      setLoading(false);
+    }
+  }, []);
+
   return (
     <InventoryContext.Provider
       value={{
@@ -305,6 +332,7 @@ export function InventoryProvider({ children }) {
         getWarehouseInventory,
         getInventoryItem,
         searchInventory,
+        createInventory,
         updateStock,
         adjustStockForCompletedTransfer,
         getLowStock,

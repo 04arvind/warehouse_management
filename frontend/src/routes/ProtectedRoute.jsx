@@ -1,12 +1,12 @@
 import { Navigate, Outlet, useLocation } from "react-router-dom";
-import { useAuth } from "../context";
+import { useAuth } from "@clerk/clerk-react";
 
 export default function ProtectedRoute() {
-  const { isAuthenticated, loading } = useAuth();
-
+  const { isLoaded, isSignedIn } = useAuth();
   const location = useLocation();
 
-  if (loading) {
+  // Clerk is checking the session
+  if (!isLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f1efe9]">
         <div className="text-center">
@@ -20,7 +20,8 @@ export default function ProtectedRoute() {
     );
   }
 
-  if (!isAuthenticated) {
+  // Not authenticated → Clerk login page
+  if (!isSignedIn) {
     return (
       <Navigate
         to="/login"
@@ -30,5 +31,6 @@ export default function ProtectedRoute() {
     );
   }
 
+  // Authenticated → allow access
   return <Outlet />;
 }

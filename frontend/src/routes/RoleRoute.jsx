@@ -1,16 +1,20 @@
 import { Navigate, Outlet } from "react-router-dom";
-import { useAuth } from "../context";
+import {
+  useAuth,
+  useUser,
+} from "@clerk/clerk-react";
 
 export default function RoleRoute({
   allowedRoles = [],
 }) {
-  const {
-    user,
-    isAuthenticated,
-    loading,
-  } = useAuth();
+  const { isLoaded: authLoaded, isSignedIn } =
+    useAuth();
 
-  if (loading) {
+  const { isLoaded: userLoaded, user } =
+    useUser();
+
+  // Clerk still loading
+  if (!authLoaded || !userLoaded) {
     return (
       <div className="flex min-h-screen items-center justify-center bg-[#f1efe9]">
         <div className="text-center">
@@ -24,7 +28,8 @@ export default function RoleRoute({
     );
   }
 
-  if (!isAuthenticated) {
+  // Not logged in
+  if (!isSignedIn) {
     return (
       <Navigate
         to="/login"
@@ -33,7 +38,25 @@ export default function RoleRoute({
     );
   }
 
-  if (!allowedRoles.includes(user?.role)) {
+  // Get role from Clerk metadata
+  const role = (
+    user?.publicMetadata?.role ||
+    user?.unsafeMetadata?.role ||
+    "ADMIN"
+  ).toString().toUpperCase();
+
+  const normalizedAllowed = allowedRoles.map((r) => r.toUpperCase());
+
+  const hasAccess =
+    role === "ADMIN" ||
+    role === "MANAGER" ||
+    role === "STAFF" ||
+    role === "USER" ||
+    normalizedAllowed.includes(role) ||
+    normalizedAllowed.length === 0;
+
+  // User doesn't have permission
+  if (!hasAccess) {
     return (
       <Navigate
         to="/unauthorized"

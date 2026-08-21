@@ -14,7 +14,7 @@ const inventoryService = {
   },
 
   async getByWarehouse(warehouseId, params = {}) {
-    const response = await api.get(`/warehouses/${warehouseId}/inventory`, {
+    const response = await api.get(`/inventory/warehouse/${warehouseId}`, {
       params,
     });
     return response.data;
@@ -31,6 +31,11 @@ const inventoryService = {
     const response = await api.get("/inventory/low-stock", {
       params,
     });
+    return response.data;
+  },
+
+  async create(data) {
+    const response = await api.post("/inventory", data);
     return response.data;
   },
 

@@ -14,12 +14,24 @@ const api = axios.create({
 });
 
 api.interceptors.request.use(
-  (config) => {
-    const token = storage.getToken();
+  async (config) => {
+    let token = null;
+
+    // Get live JWT token from Clerk if available in browser
+    try {
+      if (typeof window !== "undefined" && window.Clerk?.session) {
+        token = await window.Clerk.session.getToken();
+      }
+    } catch (e) {
+      console.warn("Clerk session token retrieval note:", e.message);
+    }
+
+    if (!token) {
+      token = storage.getToken();
+    }
 
     if (token) {
-      config.headers.Authorization =
-        `Bearer ${token}`;
+      config.headers.Authorization = `Bearer ${token}`;
     }
 
     return config;
@@ -32,10 +44,8 @@ api.interceptors.response.use(
 
   (error) => {
     if (error.response?.status === 401) {
-      storage.clear();
-
-      // Don't redirect here.
-      // AuthContext will handle authentication state.
+      storage.removeToken();
+      // AuthContext and Clerk handle redirect if unauthenticated
     }
 
     return Promise.reject(error);

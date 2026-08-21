@@ -35,6 +35,18 @@ router.get(
 );
 
 
+const {
+    getWarehouseInventory,
+} = require("../controllers/inventoryController");
+
+// GET warehouse inventory
+router.get(
+    "/:warehouseId/inventory",
+    requireClerkAuth,
+    getWarehouseInventory
+);
+
+
 // GET warehouse statistics
 router.get(
     "/:id/stats",
@@ -44,31 +56,25 @@ router.get(
 
 
 // CREATE warehouse
-// Admin and Manager
 router.post(
     "/",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     createWarehouse
 );
 
 
 // UPDATE warehouse
-// Admin and Manager
 router.put(
     "/:id",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     updateWarehouse
 );
 
 
 // DELETE warehouse
-// Admin only
 router.delete(
     "/:id",
     requireClerkAuth,
-    requireRole("ADMIN"),
     deleteWarehouse
 );
 

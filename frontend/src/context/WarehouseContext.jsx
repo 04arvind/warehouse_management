@@ -79,19 +79,14 @@ export function WarehouseProvider({ children }) {
       return data;
     } catch (err) {
       // Keep local state on error
-      return warehouses;
+      return defaultWarehouses;
     } finally {
       setLoading(false);
     }
-  }, [warehouses]);
+  }, []);
 
   const getWarehouse = useCallback(
     async (id) => {
-      const existing = warehouses.find(
-        (w) => w._id === id || w.id === id
-      );
-      if (existing) return existing;
-
       try {
         setLoading(true);
         setError(null);
@@ -104,7 +99,7 @@ export function WarehouseProvider({ children }) {
         setLoading(false);
       }
     },
-    [warehouses]
+    []
   );
 
   const createWarehouse = useCallback(async (data) => {
@@ -154,15 +149,12 @@ export function WarehouseProvider({ children }) {
         const response = await warehouseService.update(id, data);
         updated = response?.data || response;
       } catch (e) {
-        updated = {
-          ...warehouses.find((w) => w._id === id || w.id === id),
-          ...data,
-        };
+        updated = { _id: id, id, ...data };
       }
 
       setWarehouses((prev) =>
         prev.map((warehouse) =>
-          warehouse._id === id || warehouse.id === id ? updated : warehouse
+          warehouse._id === id || warehouse.id === id ? { ...warehouse, ...updated } : warehouse
         )
       );
 
@@ -173,7 +165,7 @@ export function WarehouseProvider({ children }) {
     } finally {
       setLoading(false);
     }
-  }, [warehouses]);
+  }, []);
 
   const deleteWarehouse = useCallback(async (id) => {
     try {

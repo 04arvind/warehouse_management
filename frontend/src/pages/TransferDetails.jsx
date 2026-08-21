@@ -218,45 +218,61 @@ export default function TransferDetails() {
           </div>
 
           {/* Actions */}
-          {canManageTransfer && (
-            <div className="border border-[#ddd9d1] bg-[#fbfaf7] p-5">
-              <h2 className="text-sm font-semibold">Transfer Actions</h2>
-
-              <div className="mt-5 flex flex-wrap gap-2">
-                {transfer.status === "PENDING" && (
-                  <>
-                    <Button onClick={handleApprove} loading={isActionLoading}>
-                      <Check size={13} />
-                      Approve
-                    </Button>
-
-                    <Button
-                      variant="secondary"
-                      onClick={handleReject}
-                      loading={isActionLoading}
-                    >
-                      <X size={13} />
-                      Reject
-                    </Button>
-                  </>
-                )}
-
-                {transfer.status === "APPROVED" && (
-                  <Button onClick={handleShip} loading={isActionLoading}>
-                    <Truck size={13} />
-                    Mark In Transit
-                  </Button>
-                )}
-
-                {transfer.status === "IN_TRANSIT" && (
-                  <Button onClick={handleComplete} loading={isActionLoading}>
-                    <PackageCheck size={13} />
-                    Complete Transfer
-                  </Button>
-                )}
-              </div>
+          <div className="border border-[#ddd9d1] bg-[#fbfaf7] p-5">
+            <div className="flex items-center justify-between">
+              <h2 className="text-sm font-semibold">Transfer Workflow & Actions</h2>
+              <span className="text-[10px] text-[#77736b]">
+                Current status: <strong className="text-black uppercase">{transfer.status}</strong>
+              </span>
             </div>
-          )}
+
+            <p className="mt-1 text-[11px] text-[#77736b]">
+              {transfer.status === "PENDING" &&
+                `Action required by destination warehouse (${destinationName}) or manager: Approve or Reject transfer.`}
+              {transfer.status === "APPROVED" &&
+                `Transfer approved. Action required by source warehouse (${sourceName}): Dispatch and mark In Transit.`}
+              {transfer.status === "IN_TRANSIT" &&
+                `Shipment is on the way. Action required by destination warehouse (${destinationName}): Receive and Complete.`}
+              {transfer.status === "COMPLETED" &&
+                "Transfer completed. Stock has been deducted from origin and credited to destination warehouse."}
+              {transfer.status === "REJECTED" &&
+                "Transfer request was rejected. No inventory movements occurred."}
+            </p>
+
+            <div className="mt-5 flex flex-wrap gap-2">
+              {transfer.status === "PENDING" && (
+                <>
+                  <Button onClick={handleApprove} loading={isActionLoading}>
+                    <Check size={13} />
+                    Approve Transfer
+                  </Button>
+
+                  <Button
+                    variant="secondary"
+                    onClick={handleReject}
+                    loading={isActionLoading}
+                  >
+                    <X size={13} />
+                    Reject Transfer
+                  </Button>
+                </>
+              )}
+
+              {transfer.status === "APPROVED" && (
+                <Button onClick={handleShip} loading={isActionLoading}>
+                  <Truck size={13} />
+                  Dispatch & Mark In Transit
+                </Button>
+              )}
+
+              {transfer.status === "IN_TRANSIT" && (
+                <Button onClick={handleComplete} loading={isActionLoading}>
+                  <PackageCheck size={13} />
+                  Receive & Complete Transfer
+                </Button>
+              )}
+            </div>
+          </div>
         </div>
 
         {/* Timeline */}

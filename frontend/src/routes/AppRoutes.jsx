@@ -9,7 +9,9 @@ import {
 import ProtectedRoute from "./ProtectedRoute";
 import RoleRoute from "./RoleRoute";
 
-import Login from "../pages/Login"
+import Login from "../pages/Login";
+import Signup from "../pages/Signup";
+
 import Dashboard from "../pages/Dashboard";
 import Warehouses from "../pages/Warehouses";
 import Inventory from "../pages/Inventory";
@@ -57,13 +59,20 @@ function Unauthorized() {
 export default function AppRoutes() {
   return (
     <BrowserRouter>
-
       <Routes>
 
-        {/* Public */}
+        {/* =========================
+            PUBLIC
+        ========================== */}
+
         <Route
-          path="/login"
+          path="/login/*"
           element={<Login />}
+        />
+
+        <Route
+          path="/signup/*"
+          element={<Signup />}
         />
 
         <Route
@@ -71,13 +80,16 @@ export default function AppRoutes() {
           element={<Unauthorized />}
         />
 
-        {/* Protected */}
+
+        {/* =========================
+            PROTECTED
+        ========================== */}
+
         <Route element={<ProtectedRoute />}>
 
-          <Route
-            element={<DashboardLayout />}
-          >
+          <Route element={<DashboardLayout />}>
 
+            {/* "/" → "/dashboard" */}
             <Route
               index
               element={
@@ -87,8 +99,6 @@ export default function AppRoutes() {
                 />
               }
             />
-
-            {/* General authenticated routes */}
 
             <Route
               path="/dashboard"
@@ -125,15 +135,18 @@ export default function AppRoutes() {
               element={<Settings />}
             />
 
-            {/* Admin only */}
 
-            <Route element={
-              <RoleRoute
-                allowedRoles={[
-                  "ADMIN",
-                ]}
-              />
-            }>
+            {/* =========================
+                ADMIN
+            ========================== */}
+
+            <Route
+              element={
+                <RoleRoute
+                  allowedRoles={["ADMIN"]}
+                />
+              }
+            >
 
               <Route
                 path="/admin"
@@ -156,7 +169,11 @@ export default function AppRoutes() {
 
         </Route>
 
-        {/* 404 */}
+
+        {/* =========================
+            404
+        ========================== */}
+
         <Route
           path="/404"
           element={<NotFound />}
@@ -173,7 +190,6 @@ export default function AppRoutes() {
         />
 
       </Routes>
-
     </BrowserRouter>
   );
 }

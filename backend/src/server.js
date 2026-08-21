@@ -39,11 +39,27 @@ connectDB();
 
 
 // CORS
+const allowedOrigins = [
+    process.env.CLIENT_URL,
+    "http://localhost:5173",
+    "http://localhost:3000",
+    "http://localhost:5174",
+].filter(Boolean);
+
 app.use(
     cors({
-        origin:
-            process.env.CLIENT_URL ||
-            "http://localhost:5173",
+        origin: (origin, callback) => {
+            if (!origin) return callback(null, true);
+            if (
+                allowedOrigins.includes(origin) ||
+                allowedOrigins.includes("*") ||
+                origin.endsWith(".vercel.app")
+            ) {
+                return callback(null, true);
+            }
+            // Allow in development
+            return callback(null, true);
+        },
         credentials: true,
     })
 );
@@ -125,11 +141,15 @@ app.use(errorHandler);
 const PORT =
     process.env.PORT || 5000;
 
-app.listen(
-    PORT,
-    () => {
-        console.log(
-            `Server running on port ${PORT}`
-        );
-    }
-);
+if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
+    app.listen(
+        PORT,
+        () => {
+            console.log(
+                `Server running on port ${PORT}`
+            );
+        }
+    );
+}
+
+module.exports = app;

@@ -1,5 +1,6 @@
 const Warehouse = require("../models/Warehouse");
 const Inventory = require("../models/Inventory");
+const { createAuditLog } = require("../utils/audit");
 
 
 // GET /api/warehouses
@@ -8,9 +9,31 @@ const getWarehouses = async (req, res, next) => {
         const warehouses = await Warehouse.find()
             .sort({ createdAt: -1 });
 
+        // Calculate actual utilization per warehouse
+        const enhancedWarehouses = await Promise.all(
+            warehouses.map(async (wh) => {
+                const inventory = await Inventory.find({ warehouse: wh._id });
+                const usedCapacity = inventory.reduce(
+                    (sum, item) => sum + (Number(item.quantity) || 0),
+                    0
+                );
+                const capacity = Number(wh.capacity) || 1;
+                const utilization = Math.min(
+                    100,
+                    Math.round((usedCapacity / capacity) * 100)
+                );
+                const whObj = wh.toObject();
+                return {
+                    ...whObj,
+                    usedCapacity,
+                    utilization,
+                };
+            })
+        );
+
         res.status(200).json({
             success: true,
-            warehouses,
+            warehouses: enhancedWarehouses,
         });
     } catch (error) {
         next(error);
@@ -32,9 +55,26 @@ const getWarehouse = async (req, res, next) => {
             });
         }
 
+        const inventory = await Inventory.find({ warehouse: warehouse._id });
+        const usedCapacity = inventory.reduce(
+            (sum, item) => sum + (Number(item.quantity) || 0),
+            0
+        );
+        const capacity = Number(warehouse.capacity) || 1;
+        const utilization = Math.min(
+            100,
+            Math.round((usedCapacity / capacity) * 100)
+        );
+
+        const whObj = warehouse.toObject();
+
         res.status(200).json({
             success: true,
-            warehouse,
+            warehouse: {
+                ...whObj,
+                usedCapacity,
+                utilization,
+            },
         });
     } catch (error) {
         next(error);
@@ -49,6 +89,7 @@ const createWarehouse = async (req, res, next) => {
             name,
             code,
             location,
+            address,
             capacity,
         } = req.body;
 
@@ -65,9 +106,17 @@ const createWarehouse = async (req, res, next) => {
             });
         }
 
+        const parsedCapacity = Number(capacity);
+        if (isNaN(parsedCapacity) || parsedCapacity <= 0) {
+            return res.status(400).json({
+                success: false,
+                message: "Capacity must be a positive number",
+            });
+        }
+
         const existingWarehouse =
             await Warehouse.findOne({
-                code: code.toUpperCase(),
+                code: code.toUpperCase().trim(),
             });
 
         if (existingWarehouse) {
@@ -80,11 +129,20 @@ const createWarehouse = async (req, res, next) => {
 
         const warehouse =
             await Warehouse.create({
-                name,
-                code,
-                location,
-                capacity,
+                name: name.trim(),
+                code: code.toUpperCase().trim(),
+                location: location.trim(),
+                address: address ? address.trim() : "",
+                capacity: parsedCapacity,
             });
+
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "WAREHOUSE_CREATED",
+            resource: "Warehouse",
+            resourceId: warehouse._id.toString(),
+            details: `Created warehouse ${warehouse.name} (${warehouse.code}) in ${warehouse.location}`,
+        });
 
         res.status(201).json({
             success: true,
@@ -121,6 +179,14 @@ const updateWarehouse = async (
                 message: "Warehouse not found",
             });
         }
+
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "WAREHOUSE_UPDATED",
+            resource: "Warehouse",
+            resourceId: warehouse._id.toString(),
+            details: `Updated warehouse ${warehouse.name} (${warehouse.code})`,
+        });
 
         res.status(200).json({
             success: true,
@@ -167,6 +233,14 @@ const deleteWarehouse = async (
         }
 
         await warehouse.deleteOne();
+
+        await createAuditLog({
+            userId: req.auth?.userId || "system",
+            action: "WAREHOUSE_DELETED",
+            resource: "Warehouse",
+            resourceId: warehouse._id.toString(),
+            details: `Deleted warehouse ${warehouse.name} (${warehouse.code})`,
+        });
 
         res.status(200).json({
             success: true,

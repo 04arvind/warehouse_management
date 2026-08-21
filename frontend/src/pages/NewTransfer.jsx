@@ -55,6 +55,13 @@ export default function NewTransfer() {
       ...data,
       sourceWarehouseName: srcWh?.name || "Source Warehouse",
       destinationWarehouseName: destWh?.name || "Destination Warehouse",
+      items: (data.items || []).map((item) => ({
+        inventory: item.productId || item.inventory || item.id || item._id,
+        productId: item.productId || item.inventory || item.id || item._id,
+        sku: item.sku,
+        name: item.productName || item.name,
+        quantity: Number(item.quantity),
+      })),
     };
 
     try {
@@ -71,14 +78,31 @@ export default function NewTransfer() {
     }
   };
 
-  const products = inventory.map((item) => ({
-    id: item._id || item.id,
-    name: item.product || item.productName,
-    sku: item.sku,
-    available: Number(item.quantity || 0),
-    warehouseId:
-      item.warehouseId || item.warehouse?._id || item.warehouse?.id,
-  }));
+  const products = inventory.map((item) => {
+    const whId =
+      item.warehouseId ||
+      item.warehouse?._id ||
+      item.warehouse?.id ||
+      (typeof item.warehouse === "string" ? item.warehouse : "");
+
+    const whName =
+      item.warehouseName ||
+      item.warehouse?.name ||
+      (typeof item.warehouse === "string" ? item.warehouse : "Warehouse");
+
+    return {
+      id: item._id || item.id,
+      _id: item._id || item.id,
+      name: item.product || item.productName || item.name || "Product",
+      productName: item.product || item.productName || item.name || "Product",
+      sku: item.sku || `SKU-${item._id || item.id}`,
+      available: Number(item.quantity ?? 100),
+      quantity: Number(item.quantity ?? 100),
+      warehouseId: whId,
+      warehouseName: whName,
+      warehouse: whName,
+    };
+  });
 
   return (
     <div className="space-y-7">

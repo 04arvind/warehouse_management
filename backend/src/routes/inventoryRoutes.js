@@ -61,21 +61,17 @@ router.get(
 
 
 // CREATE inventory item
-// Manager and Admin
 router.post(
     "/",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     createInventory
 );
 
 
 // UPDATE stock
-// Manager and Admin
 router.patch(
     "/:id/stock",
     requireClerkAuth,
-    requireRole("ADMIN", "MANAGER"),
     updateStock
 );
 

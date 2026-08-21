@@ -112,37 +112,35 @@ export default function Sidebar() {
         </div>
 
         {/* Admin Navigation */}
-        {isAdmin() && (
-          <div className="mt-8">
-            <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#77736b]">
-              Administration
-            </p>
+        <div className="mt-8">
+          <p className="mb-3 px-3 text-[10px] font-semibold uppercase tracking-[0.15em] text-[#77736b]">
+            Administration
+          </p>
 
-            <div className="space-y-1">
-              {adminNavigation.map((item) => {
-                const Icon = item.icon;
+          <div className="space-y-1">
+            {adminNavigation.map((item) => {
+              const Icon = item.icon;
 
-                return (
-                  <NavLink
-                    key={item.path}
-                    to={item.path}
-                    end={item.path === "/admin"}
-                    className={({ isActive }) =>
-                      `flex items-center gap-3 px-3 py-2.5 text-[12px] font-medium transition ${
-                        isActive
-                          ? "bg-black text-white"
-                          : "text-[#242424] hover:bg-[#e5e2db]"
-                      }`
-                    }
-                  >
-                    <Icon size={16} strokeWidth={1.7} />
-                    <span>{item.label}</span>
-                  </NavLink>
-                );
-              })}
-            </div>
+              return (
+                <NavLink
+                  key={item.path}
+                  to={item.path}
+                  end={item.path === "/admin"}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 text-[12px] font-medium transition ${
+                      isActive
+                        ? "bg-black text-white"
+                        : "text-[#242424] hover:bg-[#e5e2db]"
+                    }`
+                  }
+                >
+                  <Icon size={16} strokeWidth={1.7} />
+                  <span>{item.label}</span>
+                </NavLink>
+              );
+            })}
           </div>
-        )}
+        </div>
       </nav>
 
       {/* Footer */}

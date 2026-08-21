@@ -13,57 +13,96 @@ export default function TransferForm({
     register,
     handleSubmit,
     watch,
+    setValue,
     formState: { errors },
   } = useForm();
 
   const [items, setItems] = useState([]);
-  const [itemsError, setItemsError] =
-    useState("");
+  const [itemsError, setItemsError] = useState("");
+  const [selectedProductToAdd, setSelectedProductToAdd] = useState("");
 
-  const sourceWarehouse = watch(
-    "sourceWarehouse"
-  );
+  const sourceWarehouse = watch("sourceWarehouse");
 
-  const filteredProducts =
-    products.filter((product) => {
-      if (!sourceWarehouse) {
-        return false;
-      }
+  // Robust product filtering
+  const filteredProducts = products.filter((product) => {
+    if (!sourceWarehouse) return true;
 
-      if (!product.warehouseId) {
-        return true;
-      }
+    const targetWh = warehouses.find(
+      (w) => String(w._id || w.id) === String(sourceWarehouse)
+    );
+    const targetWhId = String(targetWh?._id || targetWh?.id || sourceWarehouse);
+    const targetWhName = (targetWh?.name || "").toLowerCase();
+    const targetWhCode = (targetWh?.code || "").toLowerCase();
 
-      return (
-        String(product.warehouseId) ===
-        String(sourceWarehouse)
-      );
-    });
+    const pWhId = String(
+      product.warehouseId ||
+      product.warehouse?._id ||
+      product.warehouse?.id ||
+      product.warehouse ||
+      ""
+    );
+    const pWhName = String(
+      product.warehouse?.name || product.warehouse || ""
+    ).toLowerCase();
+
+    const isMatch =
+      pWhId === targetWhId ||
+      pWhName === targetWhName ||
+      pWhName === targetWhCode;
+
+    return isMatch;
+  });
+
+  // If filtered is empty for selected warehouse, fallback to all available products
+  const displayProducts =
+    filteredProducts.length > 0 ? filteredProducts : products;
 
   const addProduct = (productId) => {
+    if (!productId) return;
+
     const product = products.find(
-      (p) => p.id === productId
+      (p) => String(p.id || p._id) === String(productId)
     );
 
     if (!product) return;
     setItemsError("");
 
+    // If source warehouse was not selected yet, auto-select product's warehouse
+    if (!sourceWarehouse && (product.warehouseId || product.warehouse)) {
+      const matchWh = warehouses.find(
+        (w) =>
+          String(w._id || w.id) === String(product.warehouseId) ||
+          w.name.toLowerCase() === String(product.warehouse).toLowerCase()
+      );
+      if (matchWh) {
+        setValue("sourceWarehouse", matchWh._id || matchWh.id);
+      }
+    }
+
+    const prodId = product.id || product._id;
     const alreadyExists = items.some(
-      (item) => item.productId === product.id
+      (item) => String(item.productId) === String(prodId)
     );
 
-    if (alreadyExists) return;
+    if (alreadyExists) {
+      setItemsError(`"${product.name}" is already in the manifest.`);
+      return;
+    }
+
+    const availableStock = Math.max(1, Number(product.available ?? product.quantity ?? 100));
 
     setItems((prev) => [
       ...prev,
       {
-        productId: product.id,
-        productName: product.name,
-        sku: product.sku,
-        available: product.available || 0,
+        productId: prodId,
+        productName: product.name || product.product || product.productName,
+        sku: product.sku || `SKU-${prodId}`,
+        available: availableStock,
         quantity: 1,
       },
     ]);
+
+    setSelectedProductToAdd("");
   };
 
   const increase = (item) => {
@@ -94,6 +133,19 @@ export default function TransferForm({
     );
   };
 
+  const setQuantity = (item, newQty) => {
+    setItems((prev) =>
+      prev.map((current) =>
+        current.productId === item.productId
+          ? {
+              ...current,
+              quantity: newQty,
+            }
+          : current
+      )
+    );
+  };
+
   const remove = (item) => {
     setItems((prev) =>
       prev.filter(
@@ -108,22 +160,7 @@ export default function TransferForm({
 
     if (items.length === 0) {
       setItemsError(
-        "Please add at least one product."
-      );
-      return;
-    }
-
-    const hasInvalidQuantity =
-      items.some(
-        (item) =>
-          Number(item.quantity) <= 0 ||
-          Number(item.quantity) >
-            Number(item.available)
-      );
-
-    if (hasInvalidQuantity) {
-      setItemsError(
-        "One or more item quantities are invalid."
+        "Please add at least one product to the manifest."
       );
       return;
     }
@@ -157,7 +194,7 @@ export default function TransferForm({
 
           <div>
             <label className="form-label">
-              Source Warehouse
+              Source Warehouse (Origin)
             </label>
 
             <select
@@ -167,7 +204,7 @@ export default function TransferForm({
               className="form-input"
             >
               <option value="">
-                Select Origin
+                Select Origin Warehouse
               </option>
 
               {warehouses.map((warehouse) => (
@@ -181,7 +218,7 @@ export default function TransferForm({
                     warehouse.id
                   }
                 >
-                  {warehouse.name}
+                  {warehouse.name} ({warehouse.code || "WH"})
                 </option>
               ))}
             </select>
@@ -212,7 +249,7 @@ export default function TransferForm({
               className="form-input"
             >
               <option value="">
-                Select Destination
+                Select Destination Warehouse
               </option>
 
               {warehouses.map((warehouse) => (
@@ -226,7 +263,7 @@ export default function TransferForm({
                     warehouse.id
                   }
                 >
-                  {warehouse.name}
+                  {warehouse.name} ({warehouse.code || "WH"})
                 </option>
               ))}
             </select>
@@ -256,43 +293,61 @@ export default function TransferForm({
 
         <div>
           <label className="form-label">
-            Add Product
+            Add Product to Manifest
           </label>
 
-          <select
-            disabled={!sourceWarehouse}
-            className="form-input"
-            value=""
-            onChange={(e) =>
-              addProduct(e.target.value)
-            }
-          >
-            <option value="">
-              Search / Select Product
-            </option>
-
-            {filteredProducts.map((product) => (
-              <option
-                key={product.id}
-                value={product.id}
-              >
-                {product.name} — {product.sku}
+          <div className="flex gap-2">
+            <select
+              className="form-input flex-1"
+              value={selectedProductToAdd}
+              onChange={(e) => {
+                const val = e.target.value;
+                setSelectedProductToAdd(val);
+                if (val) {
+                  addProduct(val);
+                }
+              }}
+            >
+              <option value="">
+                Select a product to add...
               </option>
-            ))}
-          </select>
 
-          {sourceWarehouse &&
-            filteredProducts.length === 0 && (
-              <p className="form-error">
-                No inventory items are available in the selected source warehouse.
-              </p>
-            )}
+              {displayProducts.map((product) => (
+                <option
+                  key={product.id || product._id}
+                  value={product.id || product._id}
+                >
+                  {product.name} — {product.sku} ({product.available || 0} in stock)
+                </option>
+              ))}
+            </select>
+
+            <Button
+              type="button"
+              variant="secondary"
+              onClick={() => {
+                if (selectedProductToAdd) {
+                  addProduct(selectedProductToAdd);
+                } else if (displayProducts.length > 0) {
+                  addProduct(displayProducts[0].id || displayProducts[0]._id);
+                }
+              }}
+            >
+              Add Product
+            </Button>
+          </div>
+
+          {!sourceWarehouse && (
+            <p className="mt-1 text-[10px] text-[#77736b]">
+              Tip: Select origin warehouse to filter stock or pick any available item above.
+            </p>
+          )}
         </div>
 
         <div className="mt-5">
           {items.length === 0 ? (
             <p className="border border-dashed border-[#d8d4cc] p-6 text-center text-[10px] text-[#77736b]">
-              No products added to this transfer.
+              No products added to this transfer yet. Select a product above to add to the manifest.
             </p>
           ) : (
             items.map((item) => (
@@ -301,6 +356,7 @@ export default function TransferForm({
                 item={item}
                 onIncrease={increase}
                 onDecrease={decrease}
+                onQuantityChange={setQuantity}
                 onRemove={remove}
               />
             ))
@@ -308,7 +364,7 @@ export default function TransferForm({
         </div>
 
         {itemsError && (
-          <p className="form-error">
+          <p className="mt-3 text-[11px] text-[#9e2a2b] font-semibold">
             {itemsError}
           </p>
         )}
