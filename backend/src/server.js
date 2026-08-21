@@ -4,41 +4,34 @@ const express = require("express");
 const cors = require("cors");
 const morgan = require("morgan");
 
-const connectDB =
-    require("./config/db");
+const connectDB = require("./config/db");
 
-const {
-    clerkAuth,
-} = require("./middleware/auth");
-
-const errorHandler =
-    require("./middleware/errorHandler");
+const { clerkAuth } = require("./middleware/auth");
+const errorHandler = require("./middleware/errorHandler");
 
 // Routes
-const warehouseRoutes =
-    require("./routes/warehouseRoutes");
-
-const inventoryRoutes =
-    require("./routes/inventoryRoutes");
-
-const transferRoutes =
-    require("./routes/transferRoutes");
-
-const userRoutes =
-    require("./routes/userRoutes");
-
-const auditRoutes =
-    require("./routes/auditRoutes");
-
+const warehouseRoutes = require("./routes/warehouseRoutes");
+const inventoryRoutes = require("./routes/inventoryRoutes");
+const transferRoutes = require("./routes/transferRoutes");
+const userRoutes = require("./routes/userRoutes");
+const auditRoutes = require("./routes/auditRoutes");
 
 const app = express();
 
+/*
+|--------------------------------------------------------------------------
+| Database
+|--------------------------------------------------------------------------
+*/
 
-// Database
 connectDB();
 
+/*
+|--------------------------------------------------------------------------
+| CORS
+|--------------------------------------------------------------------------
+*/
 
-// CORS
 const allowedOrigins = [
     process.env.CLIENT_URL,
     "http://localhost:5173",
@@ -49,23 +42,38 @@ const allowedOrigins = [
 app.use(
     cors({
         origin: (origin, callback) => {
-            if (!origin) return callback(null, true);
-            if (
-                allowedOrigins.includes(origin) ||
-                allowedOrigins.includes("*") ||
-                origin.endsWith(".vercel.app")
-            ) {
+            // Allow requests without an Origin header
+            // (Postman, server-to-server, health checks, etc.)
+            if (!origin) {
                 return callback(null, true);
             }
-            // Allow in development
-            return callback(null, true);
+
+            // Allow configured origins
+            if (allowedOrigins.includes(origin)) {
+                return callback(null, true);
+            }
+
+            // Allow Vercel preview/production deployments
+            if (origin.endsWith(".vercel.app")) {
+                return callback(null, true);
+            }
+
+            // Reject unknown origins
+            return callback(
+                new Error("Not allowed by CORS")
+            );
         },
+
         credentials: true,
     })
 );
 
+/*
+|--------------------------------------------------------------------------
+| Body Parser
+|--------------------------------------------------------------------------
+*/
 
-// Body parser
 app.use(express.json());
 
 app.use(
@@ -74,29 +82,42 @@ app.use(
     })
 );
 
+/*
+|--------------------------------------------------------------------------
+| Logger
+|--------------------------------------------------------------------------
+*/
 
-// Logger
 app.use(morgan("dev"));
 
+/*
+|--------------------------------------------------------------------------
+| Health Check
+|--------------------------------------------------------------------------
+*/
 
-// Clerk
+app.get("/api/health", (req, res) => {
+    res.status(200).json({
+        success: true,
+        message: "Warehouse Management API is running",
+        environment: process.env.NODE_ENV || "development",
+    });
+});
+
+/*
+|--------------------------------------------------------------------------
+| Clerk Authentication
+|--------------------------------------------------------------------------
+*/
+
 app.use(clerkAuth);
 
+/*
+|--------------------------------------------------------------------------
+| API Routes
+|--------------------------------------------------------------------------
+*/
 
-// Health check
-app.get(
-    "/api/health",
-    (req, res) => {
-        res.status(200).json({
-            success: true,
-            message:
-                "Warehouse Management API is running",
-        });
-    }
-);
-
-
-// API routes
 app.use(
     "/api/warehouses",
     warehouseRoutes
@@ -122,34 +143,52 @@ app.use(
     auditRoutes
 );
 
+/*
+|--------------------------------------------------------------------------
+| 404 Handler
+|--------------------------------------------------------------------------
+*/
 
-// 404 handler
-app.use(
-    (req, res) => {
-        res.status(404).json({
-            success: false,
-            message: "Route not found",
-        });
-    }
-);
+app.use((req, res) => {
+    res.status(404).json({
+        success: false,
+        message: "Route not found",
+        path: req.originalUrl,
+    });
+});
 
+/*
+|--------------------------------------------------------------------------
+| Global Error Handler
+|--------------------------------------------------------------------------
+*/
 
-// Global error handler
 app.use(errorHandler);
 
+/*
+|--------------------------------------------------------------------------
+| Local Development Server
+|--------------------------------------------------------------------------
+|
+| Vercel automatically handles the exported Express application.
+| app.listen() is only used when running locally.
+|
+*/
 
-const PORT =
-    process.env.PORT || 5000;
+const PORT = process.env.PORT || 5000;
 
-if (process.env.NODE_ENV !== "test" && !process.env.VERCEL) {
-    app.listen(
-        PORT,
-        () => {
-            console.log(
-                `Server running on port ${PORT}`
-            );
-        }
-    );
+if (process.env.NODE_ENV !== "production") {
+    app.listen(PORT, () => {
+        console.log(
+            `Server running on http://localhost:${PORT}`
+        );
+    });
 }
+
+/*
+|--------------------------------------------------------------------------
+| Export App
+|--------------------------------------------------------------------------
+*/
 
 module.exports = app;
