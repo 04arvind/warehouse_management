@@ -1,10 +1,24 @@
 import axios from "axios";
 import { storage } from "../utils/storage";
 
+// Normalize the API base URL so it always ends with /api
+// Handles cases like:
+//   https://backend.vercel.app        → https://backend.vercel.app/api
+//   https://backend.vercel.app/       → https://backend.vercel.app/api
+//   https://backend.vercel.app/api    → https://backend.vercel.app/api
+//   https://backend.vercel.app/api/   → https://backend.vercel.app/api
+const rawUrl =
+  import.meta.env.VITE_API_URL || "http://localhost:5000/api";
+
+const normalizeBaseUrl = (url) => {
+  const stripped = url.replace(/\/+$/, ""); // remove trailing slashes
+  return stripped.endsWith("/api") ? stripped : `${stripped}/api`;
+};
+
+const BASE_URL = normalizeBaseUrl(rawUrl);
+
 const api = axios.create({
-  baseURL:
-    import.meta.env.VITE_API_URL ||
-    "http://localhost:5000/api",
+  baseURL: BASE_URL,
 
   headers: {
     "Content-Type": "application/json",
